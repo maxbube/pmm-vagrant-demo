@@ -1,0 +1,64 @@
+---
+- name: Install pmm-client (RedHat family & Amazon)
+  yum:
+    name: "pmm-client-{{ pmm_version }}"
+    state: present
+    allow_downgrade: yes
+  when: ansible_distribution in ['CentOS','RedHat','Oracle', 'Scientific', 'Amazon']
+
+- name: Check existing services
+  command: /usr/sbin/pmm-admin list
+  register: pmm_existing_services
+  no_log: yes
+  changed_when: ('PMM client is not configured' in pmm_existing_services.stdout) or ('No services under monitoring' in pmm_existing_services.stdout) or (pmm_existing_services.rc > 0 and 'Unable to connect to PMM server by address' in pmm_existing_services.stdout_lines[0])
+  failed_when: ( pmm_existing_services.rc > 0) and ('PMM client is not configured' not in pmm_existing_services.stdout) and ('No services under monitoring' not in pmm_existing_services.stdout)
+  ignore_errors: yes
+
+- name: Create --defaults-file with credentials from inventory
+  template:
+    src: "pmm_defaults_file_template.j2"
+    dest: '{{ pmm_defaults_file }}'
+    owner: root
+    mode: 0600
+  when: ('mysql:queries' not in pmm_existing_services.stdout)
+
+- name: Check/configure PMM
+  command: "/usr/sbin/pmm-admin config --client-name {{ pmm_alias | default(inventory_hostname) }} --client-address {{ pmm_client_bind_address }} --server {{ pmm_server_ip }}:{{ pmm_server_port }} --server-user {{ pmm_username }} --server-password {{ pmm_password }} --bind-address {{ pmm_client_bind_address }}"
+  when: pmm_existing_services.changed
+  no_log: yes
+
+- name: Add Linux metrics
+  command: "/usr/sbin/pmm-admin add linux:metrics {{ pmm_alias | default(inventory_hostname) }}"
+  when: ('linux:metrics' not in pmm_existing_services.stdout)
+  register: linux_metrics
+
+- name: Add MySQL metrics
+  command: >-
+            /usr/sbin/pmm-admin add mysql:metrics {{ pmm_alias | default(inventory_hostname) }}
+            --defaults-file {{ pmm_defaults_file }}
+  when: ('mysql:metrics' not in pmm_existing_services.stdout)
+  register: mysql_metrics
+
+- name: Restart Prometheus client (Linux metrics)
+  service:
+    name: "pmm-linux-metrics-{{ linux_metrics_port }}"
+    state: restarted
+    enabled: yes
+  when: linux_metrics is defined and linux_metrics.changed
+
+- name: Restart Prometheus client (MySQL metrics)
+  service:
+    name: "pmm-mysql-metrics-{{ mysql_metrics_port }}"
+    state: restarted
+    enabled: yes
+  when: mysql_metrics is defined and mysql_metrics.changed
+
+- name: Add QAN collection
+  command: "/usr/sbin/pmm-admin add mysql:queries {{ pmm_alias | default(inventory_hostname) }} --query-source {{ pmm_query_source }} --defaults-file {{ pmm_defaults_file }}"
+  when: ('mysql:queries' not in pmm_existing_services.stdout) and pmm_qan_enabled
+  register: qan_metrics
+
+- name: Restart QAN client
+  command: "/usr/sbin/pmm-admin restart mysql:queries {{ pmm_alias | default(inventory_hostname) }}"
+  tags: monitor
+  when: (qan_metrics is defined and qan_metrics.changed) and pmm_qan_enabled

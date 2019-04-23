@@ -1,0 +1,35 @@
+---
+- name: Pull backend images for percona/pmm-server:{{ pmm_version }}
+  docker_image:
+    name: "percona/pmm-server"
+    tag: "{{ pmm_version }}"
+
+- name: Create PMM Data Container
+  docker_container:
+    name: pmm-data
+    image: "percona/pmm-server:{{ pmm_version }}"
+    state: present
+    volumes:
+      - /opt/prometheus/data
+      - /opt/consul-data
+      - /var/lib/mysql
+      - /var/lib/grafana
+    command: /bin/true
+
+- name: install container
+  docker_container:
+    name: pmm-server
+    image: "percona/pmm-server:{{ pmm_version }}"
+    state: started
+    memory: "{{ pmm_docker_memory }}"
+    published_ports:
+      - "8080:80"
+      - "8443:443"
+    volumes_from: pmm-data
+    env:
+        SERVER_USER: "{{ pmm_username }}"
+        SERVER_PASSWORD: "{{ pmm_password }}"
+        METRICS_RETENTION: "{{ pmm_metrics_retention }}"
+        METRICS_RESOLUTION: "{{ pmm_metrics_resolution }}"
+        METRICS_MEMORY: "{{ pmm_metrics_memory }}"
+    stop_timeout: 300

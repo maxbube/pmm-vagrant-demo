@@ -1,0 +1,10 @@
+---
+- hosts: servers
+  become: true
+  roles:
+  - { role: pmm, tags: pmm }
+
+- hosts: clients
+  become: true
+  roles:
+  - { role: pmm_client, tags: pmm_client }

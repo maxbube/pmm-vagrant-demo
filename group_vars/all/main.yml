@@ -1,0 +1,42 @@
+---
+pmm_version: 1.17.1
+
+# Server vars
+
+pmm_docker_memory: "{{ (ansible_memtotal_mb / 2) | int }}MB"        # Restrict memory usage for Docker
+pmm_username: pmm
+pmm_password: change_me
+pmm_metrics_retention: 720h                                         # Data retention for Prometheus
+pmm_metrics_resolution: 5s
+pmm_metrics_memory: "{{ ansible_memtotal_mb * 128 }}"
+pmm_queries_retention: 8
+
+pmm_docker_env:                                                     # ENV vars applied to the pmm-server container
+        SERVER_USER: "{{ pmm_username }}"
+        SERVER_PASSWORD: "{{ pmm_password }}"
+        METRICS_RETENTION: "{{ pmm_metrics_retention }}"
+        METRICS_RESOLUTION: "{{ pmm_metrics_resolution }}"
+        METRICS_MEMORY: "{{ pmm_metrics_memory }}"
+        DISABLE_UPDATES: 1
+        QUERIES_RETENTION: "{{ pmm_queries_retention }}"
+
+pmm_reset_container: no
+
+
+# Client vars
+
+pmm_defaults_file: /usr/local/percona/.my.cnf
+pmm_mysql_username: pmm
+pmm_mysql_passwd: changeM3!
+
+pmm_server_port: 8080
+pmm_server_ip: 192.168.2.11
+
+linux_metrics_port: 42000
+mysql_metrics_port: 42002
+
+pmm_client_bind_address: "{{ ansible_ssh_host }}"
+
+pmm_qan_enabled: yes
+pmm_query_source: slowlog
+
